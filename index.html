@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Dog Run" />
+  <title>Dog Run Safety</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --card: rgba(255,255,255,.08);
+      --muted: rgba(255,255,255,.72);
+      --green: #22c55e;
+      --orange: #f59e0b;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; color: white; }
+    body {
+      min-height: 100svh;
+      display: flex;
+      justify-content: center;
+      background:
+        radial-gradient(circle at 50% -10%, rgba(255,255,255,.12), transparent 42%),
+        var(--bg);
+    }
+    main {
+      width: min(100%, 540px);
+      min-height: 100svh;
+      padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    h1 { margin: 0; font-size: 21px; letter-spacing: -.02em; }
+    .refresh {
+      appearance:none; border:0; color:white; background:var(--card);
+      min-width:44px; height:44px; border-radius:14px; font-size:22px;
+    }
+    .hero {
+      border-radius: 30px;
+      padding: 28px 22px;
+      min-height: 355px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 20px 60px rgba(0,0,0,.25);
+      transition: background .25s ease;
+    }
+    .hero.green { background: linear-gradient(160deg, #16a34a, #047857); }
+    .hero.orange { background: linear-gradient(160deg, #f59e0b, #c2410c); }
+    .hero.red { background: linear-gradient(160deg, #ef4444, #991b1b); }
+    .hero.loading { background: linear-gradient(160deg, #334155, #111827); }
+    .status { font-size: 18px; font-weight: 800; letter-spacing: .12em; opacity:.92; }
+    .score { font-size: clamp(88px, 28vw, 138px); font-weight: 800; letter-spacing: -.07em; line-height: .95; margin: 10px 0 2px; }
+    .formula { font-size: 17px; color: rgba(255,255,255,.83); }
+    .advice { margin-top: 20px; font-size: 24px; font-weight: 750; letter-spacing:-.025em; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .card {
+      background: var(--card);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 22px;
+      padding: 18px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .card.full { grid-column: 1 / -1; }
+    .label { color: var(--muted); font-size: 13px; font-weight: 650; text-transform:uppercase; letter-spacing:.08em; }
+    .value { margin-top:7px; font-size: 27px; font-weight: 750; letter-spacing:-.03em; }
+    .sub { margin-top:5px; color:var(--muted); font-size:14px; line-height:1.35; }
+    .forecast-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-top:13px; }
+    .forecast-row + .forecast-row { border-top:1px solid rgba(255,255,255,.10); margin-top:13px; }
+    .forecast-state { font-weight:750; }
+    .time { font-size:21px; font-weight:750; white-space:nowrap; }
+    .error { line-height:1.45; font-size:16px; }
+    footer { color:rgba(255,255,255,.42); font-size:11px; text-align:center; padding:2px 10px; }
+    button { cursor:pointer; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🐕 Dog Run Safety</h1>
+    <button class="refresh" id="refresh" aria-label="Refresh">↻</button>
+  </header>
+
+  <section id="hero" class="hero loading">
+    <div class="status" id="status">CHECKING</div>
+    <div class="score" id="score">—</div>
+    <div class="formula" id="formula">Getting your location…</div>
+    <div class="advice" id="advice">One moment</div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <div class="label">UV index</div>
+      <div class="value" id="uv">—</div>
+      <div class="sub" id="uvText">Current UV</div>
+    </div>
+    <div class="card">
+      <div class="label">Light</div>
+      <div class="value" id="light">—</div>
+      <div class="sub" id="sunTime">Sunrise / sunset</div>
+    </div>
+
+    <div class="card full" id="forecastCard" hidden>
+      <div class="label">When conditions improve</div>
+      <div id="forecastRows"></div>
+    </div>
+
+    <div class="card full" id="errorCard" hidden>
+      <div class="label">Couldn't update</div>
+      <div class="error" id="errorText"></div>
+    </div>
+  </section>
+
+  <footer>
+    Score = temperature °F + relative humidity %. This app follows your personal thresholds; it is not veterinary guidance.
+  </footer>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const THRESHOLDS = {
+  greenBelow: 130,
+  redAbove: 150
+};
+
+function classify(score) {
+  if (score < THRESHOLDS.greenBelow) return "green";
+  if (score > THRESHOLDS.redAbove) return "red";
+  return "orange";
+}
+
+function stateCopy(state) {
+  if (state === "green") return {label:"GREEN", advice:"Good conditions"};
+  if (state === "orange") return {label:"CAUTION", advice:"Use caution"};
+  return {label:"RED", advice:"Too hot to run"};
+}
+
+function formatTime(iso) {
+  return new Intl.DateTimeFormat(undefined, {hour:"numeric", minute:"2-digit"}).format(new Date(iso));
+}
+
+function formatDayTime(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const tomorrow = new Date(now); tomorrow.setDate(now.getDate()+1);
+  const datePart =
+    d.toDateString() === now.toDateString() ? "Today" :
+    d.toDateString() === tomorrow.toDateString() ? "Tomorrow" :
+    new Intl.DateTimeFormat(undefined,{weekday:"short"}).format(d);
+  return `${datePart} ${formatTime(iso)}`;
+}
+
+function setHero(state, score, temp, humidity) {
+  const copy = stateCopy(state);
+  $("hero").className = `hero ${state}`;
+  $("status").textContent = copy.label;
+  $("score").textContent = Math.round(score);
+  $("formula").textContent = `${Math.round(temp)}°F + ${Math.round(humidity)}% humidity`;
+  $("advice").textContent = copy.advice;
+}
+
+function findNext(hourly, predicate) {
+  const now = Date.now();
+  for (let i=0; i<hourly.time.length; i++) {
+    const t = new Date(hourly.time[i]).getTime();
+    if (t <= now) continue;
+    const score = hourly.temperature_2m[i] + hourly.relative_humidity_2m[i];
+    if (predicate(score)) return {time: hourly.time[i], score};
+  }
+  return null;
+}
+
+function renderForecast(currentState, hourly) {
+  const card = $("forecastCard");
+  const rows = $("forecastRows");
+  rows.innerHTML = "";
+
+  if (currentState === "green") {
+    card.hidden = true;
+    return;
+  }
+
+  const targets = [];
+  if (currentState === "red") {
+    const orange = findNext(hourly, s => s <= 150 && s >= 130);
+    if (orange) targets.push({name:"🟠 Caution", data:orange});
+  }
+  const green = findNext(hourly, s => s < 130);
+  if (green) targets.push({name:"🟢 Green", data:green});
+
+  card.hidden = false;
+  if (!targets.length) {
+    rows.innerHTML = `<div class="sub" style="margin-top:12px">No safer window found in the available forecast.</div>`;
+    return;
+  }
+
+  targets.forEach(x => {
+    const row = document.createElement("div");
+    row.className = "forecast-row";
+    row.innerHTML = `
+      <div>
+        <div class="forecast-state">${x.name}</div>
+        <div class="sub">Forecast score ${Math.round(x.data.score)}</div>
+      </div>
+      <div class="time">${formatDayTime(x.data.time)}</div>`;
+    rows.appendChild(row);
+  });
+}
+
+function showError(message) {
+  $("errorCard").hidden = false;
+  $("errorText").textContent = message;
+}
+
+function hideError() {
+  $("errorCard").hidden = true;
+}
+
+async function update() {
+  hideError();
+  $("refresh").disabled = true;
+
+  if (!navigator.geolocation) {
+    showError("Location isn't supported by this browser.");
+    $("refresh").disabled = false;
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(async pos => {
+    try {
+      const {latitude, longitude} = pos.coords;
+      const params = new URLSearchParams({
+        latitude,
+        longitude,
+        current: "temperature_2m,relative_humidity_2m,is_day,uv_index",
+        hourly: "temperature_2m,relative_humidity_2m,uv_index",
+        daily: "sunrise,sunset",
+        temperature_unit: "fahrenheit",
+        timezone: "auto",
+        forecast_days: "3"
+      });
+
+      const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+      if (!res.ok) throw new Error(`Weather service returned ${res.status}.`);
+      const data = await res.json();
+
+      const temp = data.current.temperature_2m;
+      const humidity = data.current.relative_humidity_2m;
+      const score = temp + humidity;
+      const state = classify(score);
+
+      setHero(state, score, temp, humidity);
+
+      const uv = Number(data.current.uv_index);
+      $("uv").textContent = Number.isFinite(uv) ? uv.toFixed(1) : "—";
+      $("uvText").textContent =
+        uv < 3 ? "Low" :
+        uv < 6 ? "Moderate" :
+        uv < 8 ? "High" :
+        uv < 11 ? "Very high" : "Extreme";
+
+      const isDay = data.current.is_day === 1;
+      $("light").textContent = isDay ? "☀️ Light" : "🌙 Dark";
+
+      const sunriseToday = data.daily?.sunrise?.[0];
+      const sunsetToday = data.daily?.sunset?.[0];
+      const sunriseTomorrow = data.daily?.sunrise?.[1];
+      let nextSunrise = sunriseToday;
+      if (!isDay && sunsetToday && Date.now() > new Date(sunsetToday).getTime() && sunriseTomorrow) {
+        nextSunrise = sunriseTomorrow;
+      }
+      $("sunTime").textContent = isDay && sunsetToday
+        ? `Sunset ${formatTime(sunsetToday)}`
+        : (!isDay && nextSunrise ? `Sunrise ${formatDayTime(nextSunrise)}` : "Sunrise / sunset unavailable");
+
+      renderForecast(state, data.hourly);
+    } catch (e) {
+      showError(`Weather lookup failed. ${e.message}`);
+    } finally {
+      $("refresh").disabled = false;
+    }
+  }, err => {
+    const text =
+      err.code === 1 ? "Location permission is off. Allow location access for this site in Safari settings, then refresh." :
+      err.code === 2 ? "Your location couldn't be determined." :
+      "Location request timed out. Try again.";
+    showError(text);
+    $("hero").className = "hero loading";
+    $("status").textContent = "NO LOCATION";
+    $("score").textContent = "—";
+    $("formula").textContent = "Location access is required";
+    $("advice").textContent = "Tap ↻ after enabling it";
+    $("refresh").disabled = false;
+  }, {
+    enableHighAccuracy: false,
+    timeout: 12000,
+    maximumAge: 10 * 60 * 1000
+  });
+}
+
+$("refresh").addEventListener("click", update);
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(()=>{}));
+}
+
+update();
+</script>
+</body>
+</html>
